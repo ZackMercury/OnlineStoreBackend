@@ -4,8 +4,8 @@
   "description": "Test assignment for ThinkMobiles JavaScript Developer position",
   "main": "./src/index.ts",
   "scripts": {
-    "build": "webpack watch --mode=development & nodemon ./dist/bundle.js",
-    "start": "nodemon ./dist/bundle.js"
+    "build": "webpack watch --mode=development",
+    "start": "nodemon --inspect ./dist/bundle.js"
   },
   "author": "ZackMercury",
   "license": "ISC",

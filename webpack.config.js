@@ -27,17 +27,11 @@ module.exports = {
     },
 
     // Specifies integrated module set for Webpack
-    target: "node16.15",
+    target: "node",
 
     resolve: {
         extensions: [".ts", ".js"]
     },
     
-    
-    externals: [
-        {
-            'utf-8-validate': 'commonjs utf-8-validate',
-            bufferutil: 'commonjs bufferutil',
-        },
-    ]
+    externals: ['utf-8-validate', 'bufferutil', 'mongodb-client-encryption', 'aws4', 'snappy', 'kerberos', 'bson-ext']
 };

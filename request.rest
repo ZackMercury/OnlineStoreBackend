@@ -2,7 +2,7 @@ POST http://localhost:9000/register HTTP/1.1
 Content-Type: application/json
 
 {
-    "email": "zeus@hotmail.com",
-    "login": "Zeus",
+    "email": "ceus@hotmail.com",
+    "login": "  zeus",
     "password": "IlikemywomenlikeIlikemycandies"
 }

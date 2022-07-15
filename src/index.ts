@@ -1,39 +1,72 @@
 import express, { Express, json } from 'express';
-import { IncomingMessage, ServerResponse } from 'http';
 import { Hash, createHash, getHashes } from 'crypto';
-import Joi from 'joi';
+import mongoose from 'mongoose';
+import { RegisterRequest, registerSchema } from './requests/RegisterRequest';
+import { LoginRequest, loginSchema } from './requests/LoginRequest';
+import { User } from './db/User';
 
 const PORT: number = 9000;
+const DATABASE_ADDR: string = "mongodb://localhost:27017/onlineStore";
 
 const server:Express = express();
 server.use(json());
 
+mongoose.connect(DATABASE_ADDR);
+
 server.get("/*", (req, res) => {
     res.sendStatus(404);
-    res.send("Bad request");
+    res.send("404 Not found");
 });
 
-server.post("/register", (req, res) => {
-    const schema = Joi.object().keys({
-        email: Joi.string().trim().email().required(),
-        login: Joi.string().min(2).max(30).trim().required(),
-        password: Joi.string().min(5).required()
+server.post("/register", async (req, res) => {
+    // Validation
+    const validationRes = registerSchema.validate(req.body);
+    if (validationRes.error) {
+        res.send(validationRes.error.message);
+        console.error(validationRes.error.message);
+        return;
+    }
+    
+    const data: RegisterRequest = validationRes.value;
+    const passwordHashed = createHash("sha256").update(data.password).digest("base64");
+
+    // Checking the DB for login / email overlap
+    const overlap = User.where().or([{
+        email: data.email
+    }, {
+        login: data.login
+    }]);
+    if((await overlap).length) {
+        res.send("User with such email or login already exists.");
+        return;
+    }
+
+    // Adding the new user to the users collection
+    const newUser = new User({
+        email: data.email,
+        login: data.login,
+        passwordHashed: passwordHashed
     });
 
-    console.log(schema.validate(req.body));
-    console.log(req.body);
-    const login: string = req.body.login;
-    const password: string = req.body.password;
-    const passwordHashed = createHash("sha256").update(password).digest("base64");
-
-    res.send("Hello");
+    newUser.save();
+    res.send("Registration success");
 });
 
-server.post("/login", (req, res) => {
-    const schema = Joi.object().keys({
-        login: Joi.string().trim().min(2).max(30).required(),
-        password: Joi.string().min(5).required()
-    })
+
+
+server.post("/login", async (req, res) => {
+    // Validation
+    const validationRes = loginSchema.validate(req.body);
+    if (validationRes.error) {
+        console.error(validationRes.error.message);
+        res.send(`${validationRes.error.name}: ${validationRes.error.message}`)
+        return
+    }
+
+    // Logging in
+
+    const data: LoginRequest = validationRes.value;
+    
 });
 
 server.listen(PORT, () => {
