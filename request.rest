@@ -4,7 +4,11 @@ Content-Type: application/json
 {
     "email": "zeus@hotmail.com",
     "login": "  zeus",
-    "password": "IlikemywomenlikeIlikemycandy"
+    "password": "IlikemywomenlikeIlikemycandy",
+    "phone": "+380995262039",
+    "address": "Petefi St. 52, Kidyosh, Zakarpattya, Ukraine",
+    "firstname": "Zeus",
+    "lastname": "TheGreat"
 }
 ###
 POST http://localhost:9000/login HTTP/1.1
@@ -15,3 +19,17 @@ Content-Type: application/json
     "password": "IlikemywomenlikeIlikemycandy"
 }
 ###
+POST http://localhost:9000/addItem HTTP/1.1
+Content-Type: application/json
+
+{
+    "name": "Plunger",
+    "description": "A really basic plunger. Long lasting, sturdy construction. Slim design.",
+    "price": 20,
+    "category": ["Household Items", "Bathroom"],
+    "technicalDetails": {
+        "Height": "30cm",
+        "Weight": "0.8kg",
+        "Diameter": "10cm"
+    }
+}

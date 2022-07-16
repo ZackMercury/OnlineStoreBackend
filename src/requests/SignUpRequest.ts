@@ -12,10 +12,10 @@ export interface SignUpRequest {
 
 export const signUpSchema = Joi.object().keys({
     email: Joi.string().trim().lowercase().email().required(),
-    login: Joi.string().min(2).max(30).trim().required(),
+    login: Joi.string().trim().min(2).max(30).required(),
     password: Joi.string().min(5).required(),
     phone: Joi.string().min(5).max(16).required(),
-    firstname: Joi.string().min(2).max(30).trim().required(),
-    lastname: Joi.string().min(3).max(30).trim().required(),
-    address: Joi.string().min(10).trim().required()
+    firstname: Joi.string().trim().min(2).max(30).required(),
+    lastname: Joi.string().trim().min(3).max(30).required(),
+    address: Joi.string().trim().min(10).required()
 });
