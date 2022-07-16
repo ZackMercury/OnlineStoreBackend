@@ -18,7 +18,7 @@ const userSchema = new Schema ({
     lastname: String,
     address: String,
     favorites: [{ 
-        type: mongoose.Types.ObjectId,
+        type: mongoose.SchemaTypes.ObjectId,
         ref: "Item"
     }], 
 
