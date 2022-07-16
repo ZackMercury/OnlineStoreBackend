@@ -1,7 +1,7 @@
 import express, { Express, json } from 'express';
 import { Hash, createHash, getHashes } from 'crypto';
 import mongoose from 'mongoose';
-import { RegisterRequest, registerSchema } from './requests/RegisterRequest';
+import { SignUpRequest, signUpSchema } from './requests/SignUpRequest';
 import { LoginRequest, loginSchema } from './requests/LoginRequest';
 import { User } from './db/User';
 
@@ -18,17 +18,19 @@ server.get("/*", (req, res) => {
     res.send("404 Not found");
 });
 
-server.post("/register", async (req, res) => {
+server.post("/signUp", async (req, res) => {
     // Validation
-    const validationRes = registerSchema.validate(req.body);
+    const validationRes = signUpSchema.validate(req.body);
     if (validationRes.error) {
         res.send(validationRes.error.message);
         console.error(validationRes.error.message);
         return;
     }
-    
-    const data: RegisterRequest = validationRes.value;
-    const passwordHashed = createHash("sha256").update(data.password).digest("base64");
+
+    const data: SignUpRequest = validationRes.value;
+
+    // Recaptcha verification
+    // TODO Recaptcha verification
 
     // Checking the DB for login / email overlap
     const overlap = User.where().or([{
@@ -40,15 +42,16 @@ server.post("/register", async (req, res) => {
         res.send("User with such email or login already exists.");
         return;
     }
-
+    
     // Adding the new user to the users collection
+    const passwordHashed = createHash("sha256").update(data.password).digest("base64");
     const newUser = new User({
         email: data.email,
         login: data.login,
         passwordHashed: passwordHashed
     });
-
     newUser.save();
+
     res.send("Registration success");
 });
 
@@ -67,6 +70,8 @@ server.post("/login", async (req, res) => {
 
     const data: LoginRequest = validationRes.value;
     
+
+    res.send("Login successful")
 });
 
 server.listen(PORT, () => {

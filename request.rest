@@ -1,8 +1,17 @@
-POST http://localhost:9000/register HTTP/1.1
+POST http://localhost:9000/signUp HTTP/1.1
 Content-Type: application/json
 
 {
-    "email": "ceus@hotmail.com",
+    "email": "zeus@hotmail.com",
     "login": "  zeus",
-    "password": "IlikemywomenlikeIlikemycandies"
+    "password": "IlikemywomenlikeIlikemycandy"
 }
+###
+POST http://localhost:9000/login HTTP/1.1
+Content-Type: application/json
+
+{
+    "login": "zeus",
+    "password": "IlikemywomenlikeIlikemycandy"
+}
+###
