@@ -5,7 +5,7 @@
   "main": "./src/index.ts",
   "scripts": {
     "build": "webpack watch --mode=development",
-    "start": "nodemon --inspect ./dist/bundle.js",
+    "start": "nodemon ./dist/bundle.js",
     "debug": "nodemon --exec \"node --inspect-brk=0.0.0.0:9229 --require ts-node/register src/index.ts\""
   },
   "author": "ZackMercury",

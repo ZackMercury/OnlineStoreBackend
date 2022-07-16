@@ -3,42 +3,46 @@ import session from "express-session";
 import { createHash } from 'crypto';
 import mongoose from 'mongoose';
 import { SignUpRequest, signUpSchema } from './requests/SignUpRequest';
-import { LoginRequest, loginSchema } from './requests/LoginRequest';
+import { SignInRequest, signInSchema } from './requests/SignInRequest';
 import { User } from './db/User';
 import { NewItemRequest, newItemSchema } from './requests/NewItemRequest';
 import { Item } from './db/Item';
+import { AddFavoriteRequest, addFavoriteSchema } from './requests/AddFavoriteRequest';
 
 const PORT: number = 9000;
 const DATABASE_LINK: string = "mongodb://localhost:27017/onlineStore";
 
-// Server init
-
+//#region Server init
 
 const server:Express = express();
 server.use(json());
 server.use(session({
     secret: "Top Secret Number 1 You'll Never Know Bech",
+    resave: true,
+    saveUninitialized: true,
     cookie: {
         path: "/",
         httpOnly: true,
         maxAge: (4 * 7 * 24 * 60 * 60 * 1000) //ms, 4 weeks
     }
 }));
+
+//#endregion
+
 // Database init
 mongoose.connect(DATABASE_LINK);
 
 // Request handlers
 server.get("/*", (req, res) => {
     res.sendStatus(404);
-    res.send("404 Not found");
 });
 
-server.post("/signUp", async (req, res) => {
+server.post("/signup", async (req, res) => {
     // Validation
     const validationRes = signUpSchema.validate(req.body);
     if (validationRes.error) {
-        res.send(validationRes.error.message);
-        console.error(validationRes.error.message);
+        res.statusCode = 400;
+        res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
         return;
     }
 
@@ -73,15 +77,12 @@ server.post("/signUp", async (req, res) => {
     });
     await newUser.save();
 
-    // TODO Proper response object
-    res.send("Registration success");
+    res.sendStatus(200);
 });
 
-
-
-server.post("/login", async (req, res) => {
+server.post("/signin", async (req, res) => {
     // Validation
-    const validationRes = loginSchema.validate(req.body);
+    const validationRes = signInSchema.validate(req.body);
     if (validationRes.error) {
         console.error(validationRes.error.message);
         res.send(`${validationRes.error.name}: ${validationRes.error.message}`)
@@ -90,7 +91,7 @@ server.post("/login", async (req, res) => {
 
     // Logging in
 
-    const data: LoginRequest = validationRes.value;
+    const data: SignInRequest = validationRes.value;
     const hashedPassword = createHash("sha256").update(data.password).digest("base64");
 
     const user = await User.findOne({
@@ -100,8 +101,8 @@ server.post("/login", async (req, res) => {
 
     if (!user) return res.redirect("/register");
 
-    // Setting up session data
-    //TODO Setting up session data
+    // Saving the user id within session
+    req.session.user = user.id;
 
     res.redirect("/");
 });
@@ -121,10 +122,27 @@ server.post("/additem", async (req, res) => {
     });
 
     await newItem.save();
+
+    res.sendStatus(200);
 });
 
-server.patch("/addfavorite", (req, res) => {
-    // TODO Validate and add favorite
+server.patch("/addfavorite", async (req, res) => {
+    const validationRes = addFavoriteSchema.validate(req.body);
+    if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
+    const data: AddFavoriteRequest = validationRes.value;
+
+    // Verify whether the provided ObjectId is valid
+    const item = await Item.findById(data.itemID);
+    if (!item) return res.sendStatus(400);
+
+    // Add favorite item id to the array
+    const user = await User.findById(req.session.user);
+    if (!user) return res.sendStatus(401);
+
+    if(!user.favorites.includes(item.id)) user.favorites.push(item.id);
+    await user.save();
+
+    res.sendStatus(200);
 });
 
 server.listen(PORT, () => {
