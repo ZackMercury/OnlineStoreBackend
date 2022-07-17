@@ -14,6 +14,7 @@ import { GetItemsRequest, getItemsSchema } from './requests/GetItemsRequest';
 import { RemoveFavoriteRequest, removeFavoriteSchema } from './requests/RemoveFavoriteRequest';
 import { RemoveItemRequest, removeItemSchema } from './requests/RemoveItemRequest';
 import { EditItemRequest, editItemSchema } from './requests/EditItemRequest';
+import { GetItemRequest, getItemSchema } from './requests/GetItemRequest';
 
 // App constants
 const PORT: number = 9000;
@@ -129,7 +130,15 @@ server.post("/getitems", async (req, res) => {
 });
 
 server.get("/item", async (req, res) => {
-    // TODO get item details
+    // Validation
+    const validationRes = getItemSchema.validate(req.query);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
+    const data: GetItemRequest = validationRes.value;
+
+    const item = await Item.findById(data.itemID);
+    if (!item) return res.status(400).send(`Item ${data.itemID} not found`);
+
+    return res.json(item);
 });
 
 //#endregion
