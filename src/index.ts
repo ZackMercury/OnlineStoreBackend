@@ -1,4 +1,4 @@
-import express, { Express, json } from 'express';
+import express, { Express, json, urlencoded } from 'express';
 import session from "express-session";
 import { createHash } from 'crypto';
 import mongoose from 'mongoose';
@@ -19,11 +19,12 @@ import { EditItemRequest, editItemSchema } from './requests/EditItemRequest';
 const PORT: number = 9000;
 const DATABASE_LINK: string = "mongodb://localhost:27017/onlineStore";
 // Items constants
-const AVAILABLE_SORTING_FIELDS: string[] = ["id", "name", "price", "description"];
+const AVAILABLE_SORTING_FIELDS: string[] = ["id", "name", "price"];
 
 //#region Server init
 
 const server:Express = express();
+server.use(urlencoded({ extended: false }));
 server.use(json());
 server.use(session({
     secret: "Top Secret Number 1 You'll Never Know Bech",
@@ -111,12 +112,12 @@ server.post("/signin", async (req, res) => {
     res.redirect("/");
 });
 
-server.get("/getitems", async (req, res) => {
+server.post("/getitems", async (req, res) => {
     // Validation
     const validationRes = getItemsSchema.validate(req.body);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
     const data: GetItemsRequest = validationRes.value;
-    if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found.`);
+    if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found or not allowed to sort by.`);
     
     // Sorting, filtering
     const items = await Item.find()
