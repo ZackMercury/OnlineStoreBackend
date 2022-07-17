@@ -1,7 +1,10 @@
 import mongoose, { Schema } from "mongoose";
 
 const settingsSchema = new Schema ({
-    // TODO Application settings
+    categoryTree: {
+        type: String,
+        required: true
+    }
 });
 
-export const Item = mongoose.model("Settings", settingsSchema);
+export const Settings = mongoose.model("Settings", settingsSchema);

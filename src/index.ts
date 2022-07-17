@@ -16,6 +16,8 @@ import { RemoveItemRequest, removeItemSchema } from './requests/RemoveItemReques
 import { EditItemRequest, editItemSchema } from './requests/EditItemRequest';
 import { GetItemRequest, getItemSchema } from './requests/GetItemRequest';
 import { GiveAdminRequest, giveAdminSchema } from './requests/GiveAdminRequest';
+import { Settings } from './db/Settings';
+import { populateCategoryTree } from './utils/populateCategoryTree';
 
 // App constants
 const PORT: number = 9000;
@@ -43,8 +45,10 @@ server.use(session({
 
 // Database init
 mongoose.connect(DATABASE_LINK);
-// TODO Setup application settings as a global mongodb object and hit Save on any modifications
-// In order to store the categories tree
+
+// Setup application settings as a global mongodb object
+const settings = (await Settings.findOne()) || new Settings({ categoryTree: "{}" });
+settings.save();
 
 // Request handlers
 server.get("/*", (req, res) => {
@@ -109,6 +113,7 @@ server.post("/signin", async (req, res) => {
     if (!user) return res.redirect("/register");
 
     // Saving the user id within session
+    //@ts-ignore
     req.session.user = user.id;
 
     res.redirect("/");
@@ -142,6 +147,10 @@ server.get("/item", async (req, res) => {
     return res.json(item);
 });
 
+server.get("/categoryTree", async (req, res) => {
+    res.json(JSON.parse( settings.categoryTree ));
+})
+
 //#endregion
 
 //#region User features
@@ -156,6 +165,7 @@ server.patch("/addfavorite", checkIfSignedIn, async (req, res) => {
     if (!item) return res.status(400).send(`Item ${data.itemID} does not exist`);
 
     // Add favorite item id to the array
+    //@ts-ignore
     const user = await User.findById(req.session.user);
     if (!user) return res.status(500).send(`Session contains an unknown user.`);
 
@@ -176,6 +186,7 @@ server.patch("/removefavorite", checkIfSignedIn, async (req, res) => {
     if (!item) return res.status(400).send(`Item ${data.itemID} does not exist.`);
 
     // Removing the item from the current session user favorite list
+    //@ts-ignore
     const user = await User.findById(req.session.user);
     if (!user) return res.status(500).send(`Session contains an unknown user.`);
     const favs = user.favorites;
@@ -205,6 +216,12 @@ server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     });
 
     await newItem.save();
+
+    // Category tree update
+    const tree = JSON.parse(settings.categoryTree);
+    populateCategoryTree(tree, data.category);
+    settings.categoryTree = JSON.stringify(tree);
+    settings.save();
 
     res.sendStatus(200);
 });
@@ -239,6 +256,12 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     item.price = data.price;
     item.technicalDetails = data.technicalDetails;
     item.save();
+
+    // Category tree update
+    const tree = JSON.parse(settings.categoryTree);
+    populateCategoryTree(tree, data.category);
+    settings.categoryTree = JSON.stringify(tree);
+    settings.save();
 
     res.sendStatus(200);
 });
