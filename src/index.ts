@@ -8,6 +8,9 @@ import { User } from './db/User';
 import { NewItemRequest, newItemSchema } from './requests/NewItemRequest';
 import { Item } from './db/Item';
 import { AddFavoriteRequest, addFavoriteSchema } from './requests/AddFavoriteRequest';
+import { checkIfAdmin } from './middlewares/checkIfAdmin';
+import { checkIfSignedIn } from './middlewares/checkIfSignedIn';
+import { GetItemsRequest, getItemsSchema } from './requests/GetItemsRequest';
 
 const PORT: number = 9000;
 const DATABASE_LINK: string = "mongodb://localhost:27017/onlineStore";
@@ -31,18 +34,21 @@ server.use(session({
 
 // Database init
 mongoose.connect(DATABASE_LINK);
+// Setup application settings as a global mongodb object and hit Save on any modifications
 
 // Request handlers
 server.get("/*", (req, res) => {
     res.sendStatus(404);
 });
 
+//#region Visitor features
+
 server.post("/signup", async (req, res) => {
     // Validation
     const validationRes = signUpSchema.validate(req.body);
     if (validationRes.error) {
         res.statusCode = 400;
-        res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
+        res.send(`The request is invalid: ${validationRes.error.message}`);
         return;
     }
 
@@ -107,7 +113,59 @@ server.post("/signin", async (req, res) => {
     res.redirect("/");
 });
 
-server.post("/additem", async (req, res) => {
+server.get("/getitems", async (req, res) => {
+    // Validation
+    const validationRes = getItemsSchema.validate(req.body);
+    if (validationRes.error) return res.send(`The request is invalid: ${validationRes.error.message}`);
+    const data: GetItemsRequest = validationRes.value;
+    // TODO get rid of magical values
+    const sortingFields = ["id", "name", "price", "description"];
+    if (!sortingFields.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found.`);
+    
+    // Sorting, filtering
+    const items = await Item.find()
+    .sort({[data.sortBy]: (data.sort == "asc" ? 1: -1)}) // Sorting
+    .skip(data.perPage * data.page).limit(data.perPage) // Pagination
+    // TODO filtering
+
+    return res.json(items);
+});
+
+server.get("/item", async (req, res) => {
+    // TODO get item details
+});
+
+//#endregion
+
+//#region User features
+
+server.patch("/addfavorite", checkIfSignedIn, async (req, res) => {
+    const validationRes = addFavoriteSchema.validate(req.body);
+    if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
+    const data: AddFavoriteRequest = validationRes.value;
+
+    // Verify whether the provided ObjectId is valid
+    const item = await Item.findById(data.itemID);
+    if (!item) return res.sendStatus(400);
+
+    // Add favorite item id to the array
+    const user = await User.findById(req.session.user);
+    if (!user) return res.sendStatus(401);
+
+    if(!user.favorites.includes(item.id)) user.favorites.push(item.id);
+    await user.save();
+
+    res.sendStatus(200);
+});
+
+server.patch("/removefavorite", checkIfSignedIn, async (req, res) => {
+    // TODO remove favorite
+})
+
+//#endregion
+
+//#region Admin features
+server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     // Validation
     const validationRes = newItemSchema.validate(req.body);
     if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`)
@@ -126,24 +184,19 @@ server.post("/additem", async (req, res) => {
     res.sendStatus(200);
 });
 
-server.patch("/addfavorite", async (req, res) => {
-    const validationRes = addFavoriteSchema.validate(req.body);
-    if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
-    const data: AddFavoriteRequest = validationRes.value;
-
-    // Verify whether the provided ObjectId is valid
-    const item = await Item.findById(data.itemID);
-    if (!item) return res.sendStatus(400);
-
-    // Add favorite item id to the array
-    const user = await User.findById(req.session.user);
-    if (!user) return res.sendStatus(401);
-
-    if(!user.favorites.includes(item.id)) user.favorites.push(item.id);
-    await user.save();
-
-    res.sendStatus(200);
+server.delete("/removeitem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+    // TODO remove item
 });
+
+server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+    // TODO edit item
+});
+
+server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+   // TODO get users
+});
+
+//#endregion
 
 server.listen(PORT, () => {
     console.log(`Listening on port ${PORT}...`);

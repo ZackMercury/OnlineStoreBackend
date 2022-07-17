@@ -1,6 +1,7 @@
 import { User } from "../db/User"
 
 export const checkIfAdmin = async (req, res, next) => {
+    if(!req.session.user) return res.sendStatus(401);
     const user = await User.findById(req.session.user);
     if (!user) return res.sendStatus(401);
     if (user.isAdmin) next();
