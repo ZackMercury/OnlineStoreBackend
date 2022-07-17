@@ -13,6 +13,7 @@ import { checkIfSignedIn } from './middlewares/checkIfSignedIn';
 import { GetItemsRequest, getItemsSchema } from './requests/GetItemsRequest';
 import { RemoveFavoriteRequest, removeFavoriteSchema } from './requests/RemoveFavoriteRequest';
 import { RemoveItemRequest, removeItemSchema } from './requests/RemoveItemRequest';
+import { EditItemRequest, editItemSchema } from './requests/EditItemRequest';
 
 // App constants
 const PORT: number = 9000;
@@ -211,7 +212,24 @@ server.delete("/removeitem", checkIfSignedIn, checkIfAdmin, async (req, res) => 
 });
 
 server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-    // TODO edit item
+    // Validation
+    const validationRes = editItemSchema.validate(req.body);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
+    const data: EditItemRequest = validationRes.value;
+    
+    // Check if the item exists otherwise throw error
+    const item = await Item.findById(data.itemID);
+    if (!item) return res.status(400).send(`Item ${data.itemID} does not exist.`);
+
+    // Update the item
+    item.name = data.name;
+    item.category = data.category;
+    item.description = data.description;
+    item.price = data.price;
+    item.technicalDetails = data.technicalDetails;
+    item.save();
+
+    res.sendStatus(200);
 });
 
 server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
