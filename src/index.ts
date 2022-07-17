@@ -11,9 +11,13 @@ import { AddFavoriteRequest, addFavoriteSchema } from './requests/AddFavoriteReq
 import { checkIfAdmin } from './middlewares/checkIfAdmin';
 import { checkIfSignedIn } from './middlewares/checkIfSignedIn';
 import { GetItemsRequest, getItemsSchema } from './requests/GetItemsRequest';
+import { RemoveFavoriteRequest, removeFavoriteSchema } from './requests/RemoveFavoriteRequest';
 
+// App constants
 const PORT: number = 9000;
 const DATABASE_LINK: string = "mongodb://localhost:27017/onlineStore";
+// Items constants
+const AVAILABLE_SORTING_FIELDS: string[] = ["id", "name", "price", "description"];
 
 //#region Server init
 
@@ -34,7 +38,8 @@ server.use(session({
 
 // Database init
 mongoose.connect(DATABASE_LINK);
-// Setup application settings as a global mongodb object and hit Save on any modifications
+// TODO Setup application settings as a global mongodb object and hit Save on any modifications
+// In order to store the categories tree
 
 // Request handlers
 server.get("/*", (req, res) => {
@@ -46,11 +51,7 @@ server.get("/*", (req, res) => {
 server.post("/signup", async (req, res) => {
     // Validation
     const validationRes = signUpSchema.validate(req.body);
-    if (validationRes.error) {
-        res.statusCode = 400;
-        res.send(`The request is invalid: ${validationRes.error.message}`);
-        return;
-    }
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
 
     const data: SignUpRequest = validationRes.value;
 
@@ -89,15 +90,10 @@ server.post("/signup", async (req, res) => {
 server.post("/signin", async (req, res) => {
     // Validation
     const validationRes = signInSchema.validate(req.body);
-    if (validationRes.error) {
-        console.error(validationRes.error.message);
-        res.send(`${validationRes.error.name}: ${validationRes.error.message}`)
-        return
-    }
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
+    const data: SignInRequest = validationRes.value;
 
     // Logging in
-
-    const data: SignInRequest = validationRes.value;
     const hashedPassword = createHash("sha256").update(data.password).digest("base64");
 
     const user = await User.findOne({
@@ -116,11 +112,9 @@ server.post("/signin", async (req, res) => {
 server.get("/getitems", async (req, res) => {
     // Validation
     const validationRes = getItemsSchema.validate(req.body);
-    if (validationRes.error) return res.send(`The request is invalid: ${validationRes.error.message}`);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
     const data: GetItemsRequest = validationRes.value;
-    // TODO get rid of magical values
-    const sortingFields = ["id", "name", "price", "description"];
-    if (!sortingFields.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found.`);
+    if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found.`);
     
     // Sorting, filtering
     const items = await Item.find()
@@ -141,16 +135,16 @@ server.get("/item", async (req, res) => {
 
 server.patch("/addfavorite", checkIfSignedIn, async (req, res) => {
     const validationRes = addFavoriteSchema.validate(req.body);
-    if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
     const data: AddFavoriteRequest = validationRes.value;
 
     // Verify whether the provided ObjectId is valid
     const item = await Item.findById(data.itemID);
-    if (!item) return res.sendStatus(400);
+    if (!item) return res.status(400).send(`Item ${data.itemID} does not exist`);
 
     // Add favorite item id to the array
     const user = await User.findById(req.session.user);
-    if (!user) return res.sendStatus(401);
+    if (!user) return res.status(500).send(`Session contains an unknown user.`);
 
     if(!user.favorites.includes(item.id)) user.favorites.push(item.id);
     await user.save();
@@ -159,7 +153,25 @@ server.patch("/addfavorite", checkIfSignedIn, async (req, res) => {
 });
 
 server.patch("/removefavorite", checkIfSignedIn, async (req, res) => {
-    // TODO remove favorite
+    // Validation
+    const validationRes = removeFavoriteSchema.validate(req.body);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
+    const data: RemoveFavoriteRequest = validationRes.value;
+    
+    // Checking if the item exists
+    const item = await Item.findById(data.itemID);
+    if (!item) return res.status(400).send(`Item ${data.itemID} does not exist.`);
+
+    // Removing the item from the current session user favorite list
+    const user = await User.findById(req.session.user);
+    if (!user) return res.status(500).send(`Session contains an unknown user.`);
+    const favs = user.favorites;
+    if (favs.includes(item.id)) {
+        favs.splice(favs.indexOf(item.id));
+    }
+    user.save();
+
+    return res.sendStatus(200);
 })
 
 //#endregion
@@ -168,7 +180,7 @@ server.patch("/removefavorite", checkIfSignedIn, async (req, res) => {
 server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     // Validation
     const validationRes = newItemSchema.validate(req.body);
-    if (validationRes.error) return res.send(`${validationRes.error.name}: ${validationRes.error.message}`)
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
     const data: NewItemRequest = validationRes.value;
 
     const newItem = new Item({
