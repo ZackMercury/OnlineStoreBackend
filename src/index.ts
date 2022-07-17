@@ -15,6 +15,7 @@ import { RemoveFavoriteRequest, removeFavoriteSchema } from './requests/RemoveFa
 import { RemoveItemRequest, removeItemSchema } from './requests/RemoveItemRequest';
 import { EditItemRequest, editItemSchema } from './requests/EditItemRequest';
 import { GetItemRequest, getItemSchema } from './requests/GetItemRequest';
+import { GiveAdminRequest, giveAdminSchema } from './requests/GiveAdminRequest';
 
 // App constants
 const PORT: number = 9000;
@@ -243,13 +244,24 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 });
 
 server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-    // No need to validate anything, since this request is parameterless
+    // No need to validate anything, since no client input expected
     const users = await User.find();
     return res.json(users);
 });
 
 server.patch("/giveadmin", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-    // TODO give admin
+    // Validation
+    const validationRes = giveAdminSchema.validate(req.body);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
+    const data: GiveAdminRequest = validationRes.value;
+
+    const user = await User.findById(data.userID);
+    if (!user) return res.status(400).send(`User ${data.userID} not found.`);
+
+    user.isAdmin = true;
+    user.save();
+
+    return res.sendStatus(200);
 })
 
 //#endregion
