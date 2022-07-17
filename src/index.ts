@@ -243,7 +243,9 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 });
 
 server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-    // TODO get users
+    // No need to validate anything, since this request is parameterless
+    const users = await User.find();
+    return res.json(users);
 });
 
 server.patch("/giveadmin", checkIfSignedIn, checkIfAdmin, async (req, res) => {
