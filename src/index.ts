@@ -47,8 +47,12 @@ server.use(session({
 mongoose.connect(DATABASE_LINK);
 
 // Setup application settings as a global mongodb object
-const settings = (await Settings.findOne()) || new Settings({ categoryTree: "{}" });
-settings.save();
+let settings: any;
+Settings.findOne(undefined, async (err, doc) => {
+    if (!doc) doc = new Settings({ categoryTree: "{}" });
+    settings = doc;
+    await settings.save();
+});
 
 // Request handlers
 server.get("/*", (req, res) => {
@@ -127,11 +131,40 @@ server.post("/getitems", async (req, res) => {
     if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found or not allowed to sort by.`);
     
     // Sorting, filtering
-    const items = await Item.find()
-    .sort({[data.sortBy]: (data.sort == "asc" ? 1: -1)}) // Sorting
-    .skip(data.perPage * data.page).limit(data.perPage) // Pagination
-    // TODO filtering
+    let itemsQuery = Item.find();
+    // Filtering
+    if (data.filter) {
+        const filter = data.filter;
+        if (filter.priceMin || filter.priceMax)
+        {
+            itemsQuery = itemsQuery.where("price");
+            if (filter.priceMin)
+                itemsQuery = itemsQuery.gte(filter.priceMin);
+            if (filter.priceMax)
+                itemsQuery = itemsQuery.lte(filter.priceMax);
+        }
+        if (filter.category) {
+            itemsQuery.where({
+                category: { $all : filter.category }
+            })
+        }
+        if (filter.searchQuery) {
+            // TODO indexing https://youtu.be/dTN8cBDEG_Q
+            itemsQuery.where({
+                
+            })
+        }
+    }
 
+    // Sorting
+    if (data.sort == "asc")
+        itemsQuery = itemsQuery.sort({[data.sortBy]: 1}); 
+    else if (data.sort == "desc")
+        itemsQuery = itemsQuery.sort({[data.sortBy]: -1});
+
+    itemsQuery = itemsQuery.skip(data.perPage * data.page).limit(data.perPage) // Pagination
+
+    const items = await itemsQuery;
     return res.json(items);
 });
 
