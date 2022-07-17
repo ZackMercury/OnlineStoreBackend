@@ -12,6 +12,7 @@ import { checkIfAdmin } from './middlewares/checkIfAdmin';
 import { checkIfSignedIn } from './middlewares/checkIfSignedIn';
 import { GetItemsRequest, getItemsSchema } from './requests/GetItemsRequest';
 import { RemoveFavoriteRequest, removeFavoriteSchema } from './requests/RemoveFavoriteRequest';
+import { RemoveItemRequest, removeItemSchema } from './requests/RemoveItemRequest';
 
 // App constants
 const PORT: number = 9000;
@@ -197,7 +198,16 @@ server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 });
 
 server.delete("/removeitem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-    // TODO remove item
+    // Validation
+    const validationRes = removeItemSchema.validate(req.body);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
+    const data: RemoveItemRequest = validationRes.value;
+
+    // Remove item
+    const item = await Item.findById(data.itemID);
+    if (item) item.delete();
+
+    res.sendStatus(200);
 });
 
 server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
