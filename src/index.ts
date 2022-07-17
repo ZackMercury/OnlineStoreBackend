@@ -233,8 +233,12 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 });
 
 server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
-   // TODO get users
+    // TODO get users
 });
+
+server.patch("/giveadmin", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+    // TODO give admin
+})
 
 //#endregion
 
