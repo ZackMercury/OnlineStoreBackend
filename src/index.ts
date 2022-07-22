@@ -18,16 +18,34 @@ import { GetItemRequest, getItemSchema } from './requests/GetItemRequest';
 import { GiveAdminRequest, giveAdminSchema } from './requests/GiveAdminRequest';
 import { Settings } from './db/Settings';
 import { populateCategoryTree } from './utils/populateCategoryTree';
+import cors from 'cors';
+import { GetImageRequest, getImageSchema } from './requests/GetImageRequest';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 // App constants
 const PORT: number = 9000;
 const DATABASE_LINK: string = "mongodb://localhost:27017/onlineStore";
+const WHITELIST = ["http://localhost", "http://192.168.88.117", "http://localhost:9000", undefined];
 // Items constants
-const AVAILABLE_SORTING_FIELDS: string[] = ["id", "name", "price"];
+const AVAILABLE_SORTING_FIELDS = ["id", "name", "price"];
+
+// TODO refactor into classes
 
 //#region Server init
 
 const server:Express = express();
+server.use(cors({
+    credentials: true,
+    origin: function (origin, callback) {
+        if (WHITELIST.indexOf(origin) > -1) {
+            callback(null, true)
+        } else {
+            callback(new Error('Not allowed by CORS'))
+        }
+    }
+}));
 server.use(urlencoded({ extended: false }));
 server.use(json());
 server.use(session({
@@ -35,11 +53,11 @@ server.use(session({
     resave: true,
     saveUninitialized: true,
     cookie: {
-        path: "/",
         httpOnly: true,
         maxAge: (4 * 7 * 24 * 60 * 60 * 1000) //ms, 4 weeks
     }
 }));
+const uploadToImages = multer({ dest: path.resolve(__dirname, "images") });
 
 //#endregion
 
@@ -55,7 +73,7 @@ Settings.findOne(undefined, async (err, doc) => {
 });
 
 // Request handlers
-server.get("/*", (req, res) => {
+server.get("/", (req, res) => {
     res.sendStatus(404);
 });
 
@@ -68,9 +86,6 @@ server.post("/signup", async (req, res) => {
 
     const data: SignUpRequest = validationRes.value;
 
-    // Recaptcha verification
-    // TODO Recaptcha verification
-
     // Checking the DB for login / email overlap
     const overlap = User.where().or([
         { email: data.email }, 
@@ -78,7 +93,7 @@ server.post("/signup", async (req, res) => {
         { phone: data.phone }
     ]);
     if((await overlap).length)
-        return res.send("User with such phone, email or login already exists.");
+        return res.status(400).send("User with such phone, email or login already exists.");
     
     const documentCount = await User.countDocuments();
     // Adding the new user to the users collection
@@ -114,13 +129,13 @@ server.post("/signin", async (req, res) => {
         passwordHashed: hashedPassword
     });
 
-    if (!user) return res.redirect("/register");
+    if (!user) return res.sendStatus(400);
 
     // Saving the user id within session
     //@ts-ignore
     req.session.user = user.id;
 
-    res.redirect("/");
+    res.sendStatus(200);
 });
 
 server.post("/getitems", async (req, res) => {
@@ -128,10 +143,26 @@ server.post("/getitems", async (req, res) => {
     const validationRes = getItemsSchema.validate(req.body);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
     const data: GetItemsRequest = validationRes.value;
-    if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy)) return res.send(`Field ${data.sortBy} not found or not allowed to sort by.`);
-    
+    if (!AVAILABLE_SORTING_FIELDS.includes(data.sortBy!)) return res.send(`Field ${data.sortBy} not found or not allowed to sort by.`);
+
+    if (data.items) {
+        const itemQuery = Item.find().where().or(data.items.map(itemID => { return { _id: itemID }}));
+        const items = await itemQuery;
+        return res.json({items, pages: 1});
+    }
     // Sorting, filtering
-    let itemsQuery = Item.find();
+    let itemsQuery;
+    if (data.filter && data.filter.searchQuery) {
+        itemsQuery = Item.find({
+            $text: {
+                $search: data.filter.searchQuery
+            }
+        }, { score: {
+            $meta: "textScore"
+        }}).sort({ score: { $meta: "textScore"}})
+    }
+    else
+        itemsQuery = Item.find();
     // Filtering
     if (data.filter) {
         const filter = data.filter;
@@ -148,29 +179,29 @@ server.post("/getitems", async (req, res) => {
                 category: { $all : filter.category }
             })
         }
-        if (filter.searchQuery) {
-            // TODO indexing https://youtu.be/dTN8cBDEG_Q
-            itemsQuery.where({
-                
-            })
-        }
     }
 
+    if (data.sortBy == "id")
+        data.sortBy = "_id";
+        
     // Sorting
     if (data.sort == "asc")
-        itemsQuery = itemsQuery.sort({[data.sortBy]: 1}); 
+        itemsQuery = itemsQuery.sort({[data.sortBy!]: 1}); 
     else if (data.sort == "desc")
-        itemsQuery = itemsQuery.sort({[data.sortBy]: -1});
+        itemsQuery = itemsQuery.sort({[data.sortBy!]: -1});
 
+    const beforePagination = itemsQuery.clone();
     itemsQuery = itemsQuery.skip(data.perPage * data.page).limit(data.perPage) // Pagination
 
-    const items = await itemsQuery;
-    return res.json(items);
+    const items: any = await itemsQuery;
+    const totalItems = await beforePagination;
+
+    return res.json({items, pages: Math.ceil(totalItems.length / data.perPage)});
 });
 
-server.get("/item", async (req, res) => {
+server.get("/item/:itemID", async (req, res) => {
     // Validation
-    const validationRes = getItemSchema.validate(req.query);
+    const validationRes = getItemSchema.validate(req.params);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
     const data: GetItemRequest = validationRes.value;
 
@@ -181,8 +212,23 @@ server.get("/item", async (req, res) => {
 });
 
 server.get("/categoryTree", async (req, res) => {
-    res.json(JSON.parse( settings.categoryTree ));
-})
+    res.set('Cache-Control', 'no-store');
+    return res.json(JSON.parse( settings.categoryTree ));
+});
+
+server.get("/image/:itemID", async (req, res) => {
+    const validationRes = getImageSchema.validate(req.params);
+    if(validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`);
+    const data: GetImageRequest = validationRes.value;
+    const fileLocation1 = path.resolve(__dirname, "images", data.itemID + ".jpg");
+    const fileLocation2 = path.resolve(__dirname, "images", data.itemID + ".png");
+    if(fs.existsSync(fileLocation1))
+        res.contentType("image/jpeg").sendFile(fileLocation1);
+    else if (fs.existsSync(fileLocation2))
+        res.contentType("image/png").sendFile(fileLocation2);
+    else   
+        res.sendStatus(404);
+});
 
 //#endregion
 
@@ -224,17 +270,35 @@ server.patch("/removefavorite", checkIfSignedIn, async (req, res) => {
     if (!user) return res.status(500).send(`Session contains an unknown user.`);
     const favs = user.favorites;
     if (favs.includes(item.id)) {
-        favs.splice(favs.indexOf(item.id));
+        favs.splice(favs.indexOf(item.id), 1);
     }
     user.save();
 
     return res.sendStatus(200);
 })
 
+server.get("/logout", checkIfSignedIn, (req, res) => {
+    //@ts-ignore
+    req.session.user = undefined;
+    res.sendStatus(200);
+});
+
+server.get("/user", checkIfSignedIn, async (req, res) => {
+    //@ts-ignore
+    const userID = req.session.user;
+    const user = await User.findById(userID);
+    user!.passwordHashed = undefined;
+    return res.send(user);
+});
+
 //#endregion
 
 //#region Admin features
-server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+
+// Had to manually encode and decode JSON for this one because of stupid FormData
+server.post("/additem", checkIfSignedIn, checkIfAdmin, uploadToImages.single("picture"), async (req, res) => {
+    req.body.category = JSON.parse(req.body.category);
+    req.body.technicalDetails = JSON.parse(req.body.technicalDetails);
     // Validation
     const validationRes = newItemSchema.validate(req.body);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
@@ -250,6 +314,7 @@ server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 
     await newItem.save();
 
+    fs.renameSync(req.file!.path, req.file?.destination + "\\" + newItem.id + "." + req.file!.originalname.split(".").pop());
     // Category tree update
     const tree = JSON.parse(settings.categoryTree);
     populateCategoryTree(tree, data.category);
@@ -259,9 +324,9 @@ server.post("/additem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     res.sendStatus(200);
 });
 
-server.delete("/removeitem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+server.delete("/removeitem/:itemID", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     // Validation
-    const validationRes = removeItemSchema.validate(req.body);
+    const validationRes = removeItemSchema.validate(req.params);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
     const data: RemoveItemRequest = validationRes.value;
 
@@ -272,7 +337,9 @@ server.delete("/removeitem", checkIfSignedIn, checkIfAdmin, async (req, res) => 
     res.sendStatus(200);
 });
 
-server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+server.patch("/edititem", checkIfSignedIn, checkIfAdmin, uploadToImages.single("picture"), async (req, res) => {
+    req.body.category = JSON.parse(req.body.category);
+    req.body.technicalDetails = JSON.parse(req.body.technicalDetails);
     // Validation
     const validationRes = editItemSchema.validate(req.body);
     if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
@@ -290,6 +357,13 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     item.technicalDetails = data.technicalDetails;
     item.save();
 
+    const jpegFile = req.file!.destination + "\\" + item.id + ".jpg";
+    const pngFile = req.file!.destination + "\\" + item.id + ".png";
+    if(fs.existsSync(jpegFile))
+        fs.rmSync(jpegFile);
+    if(fs.existsSync(pngFile))
+        fs.rmSync(pngFile);
+    fs.renameSync(req.file!.path, req.file?.destination + "\\" + item.id + "." + req.file!.originalname.split(".").pop());
     // Category tree update
     const tree = JSON.parse(settings.categoryTree);
     populateCategoryTree(tree, data.category);
@@ -302,6 +376,7 @@ server.patch("/edititem", checkIfSignedIn, checkIfAdmin, async (req, res) => {
 server.get("/getusers", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     // No need to validate anything, since no client input expected
     const users = await User.find();
+    users.forEach(user => user.passwordHashed = undefined);
     return res.json(users);
 });
 
@@ -315,6 +390,21 @@ server.patch("/giveadmin", checkIfSignedIn, checkIfAdmin, async (req, res) => {
     if (!user) return res.status(400).send(`User ${data.userID} not found.`);
 
     user.isAdmin = true;
+    user.save();
+
+    return res.sendStatus(200);
+})
+
+server.patch("/takeadmin", checkIfSignedIn, checkIfAdmin, async (req, res) => {
+    // Validation
+    const validationRes = giveAdminSchema.validate(req.body);
+    if (validationRes.error) return res.status(400).send(`Invalid request: ${validationRes.error.message}`)
+    const data: GiveAdminRequest = validationRes.value;
+
+    const user = await User.findById(data.userID);
+    if (!user) return res.status(400).send(`User ${data.userID} not found.`);
+
+    user.isAdmin = false;
     user.save();
 
     return res.sendStatus(200);

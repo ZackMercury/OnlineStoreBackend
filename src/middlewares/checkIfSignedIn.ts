@@ -8,6 +8,7 @@ export const checkIfSignedIn = async (req, res, next) => {
             return res.sendStatus(401);
         }
         next();
+        return;
     }
     res.sendStatus(401);
 }
