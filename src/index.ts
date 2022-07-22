@@ -183,7 +183,6 @@ server.post("/getitems", async (req, res) => {
 
     if (data.sortBy == "id")
         data.sortBy = "_id";
-        
     // Sorting
     if (data.sort == "asc")
         itemsQuery = itemsQuery.sort({[data.sortBy!]: 1}); 
